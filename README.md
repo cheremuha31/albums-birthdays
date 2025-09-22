@@ -24,7 +24,7 @@ pip install -r requirements.txt
 2. Запустите утилиту и укажите один или несколько архивов/JSON‑файлов, а также минимальное количество минут прослушивания.
 
 ```bash
-python -m album_analyzer.cli export \
+python -m album_analyzer.cli \
     "~/Downloads/MyData.zip" \
     --min-minutes 120 \
     --output albums.json
