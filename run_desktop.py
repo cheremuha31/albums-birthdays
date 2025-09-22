@@ -6,6 +6,8 @@ import socket
 import threading
 import time
 from contextlib import suppress
+from pathlib import Path
+from typing import Any
 
 from album_analyzer.webapp import create_app
 
@@ -46,6 +48,53 @@ class _FlaskServer(threading.Thread):
             self._server.server_close()
 
 
+class _DesktopApi:
+    """Expose helpers to the embedded browser window."""
+
+    def __init__(self, webview_module: Any) -> None:
+        self._webview = webview_module
+        self._window: Any | None = None
+
+    def attach_window(self, window: Any) -> None:
+        """Remember the pywebview window instance once it is created."""
+
+        self._window = window
+
+    def save_albums_json(self, filename: str, content: str) -> dict[str, str]:
+        """Prompt the user to save the generated JSON file to disk."""
+
+        window = self._window
+        if window is None:
+            return {"status": "error", "message": "Окно ещё не готово."}
+
+        try:  # pragma: no cover - depends on GUI backend
+            selection = window.create_file_dialog(
+                self._webview.SAVE_DIALOG,
+                save_filename=filename,
+                file_types=("JSON файл (*.json)", "Все файлы (*.*)"),
+            )
+        except Exception as exc:  # pragma: no cover - backend specific
+            return {"status": "error", "message": str(exc)}
+
+        if not selection:
+            return {"status": "cancelled"}
+
+        if isinstance(selection, (list, tuple)):
+            destination = selection[0]
+        else:
+            destination = selection
+
+        if not destination:
+            return {"status": "cancelled"}
+
+        try:
+            Path(destination).write_text(content, encoding="utf-8")
+        except OSError as exc:  # pragma: no cover - filesystem specific
+            return {"status": "error", "message": str(exc)}
+
+        return {"status": "saved"}
+
+
 def _wait_for_server(port: int, timeout: float = 10.0) -> None:
     """Block until the background Flask server starts accepting connections."""
 
@@ -74,9 +123,18 @@ def main() -> None:
 
     window_title = "albums-birthdays — подготовка JSON"
     window_url = f"http://127.0.0.1:{server.port}"
+    api = _DesktopApi(webview)
 
     try:
-        webview.create_window(window_title, window_url, width=1024, height=720, resizable=True)
+        window = webview.create_window(
+            window_title,
+            window_url,
+            width=1024,
+            height=720,
+            resizable=True,
+            js_api=api,
+        )
+        api.attach_window(window)
         webview.start()
     finally:
         server.shutdown()
