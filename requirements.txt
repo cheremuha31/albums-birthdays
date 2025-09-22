@@ -2,3 +2,4 @@ typer>=0.9,<1.0
 requests>=2.31
 python-telegram-bot>=20.7
 pytest>=7.4
+Flask>=3.0,<4.0
