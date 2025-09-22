@@ -41,6 +41,21 @@ def build(name: str, entry_script: Path, windowed: bool, clean: bool) -> Path:
         name,
         "--onefile",
     ]
+
+    if entry_script.name == "run_desktop.py":
+        # pywebview loads its platform backends dynamically, so we need to
+        # tell PyInstaller to bundle them explicitly when building the desktop
+        # executable. Otherwise the app launches without opening a window.
+        args.extend(
+            [
+                "--hidden-import",
+                "webview",
+                "--collect-submodules",
+                "webview",
+                "--collect-data",
+                "webview",
+            ]
+        )
     if windowed:
         args.append("--noconsole")
     if clean:
