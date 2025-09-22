@@ -8,12 +8,22 @@ from typing import Iterable, List
 from .models import AlbumListening
 
 
-def export_albums(albums: Iterable[AlbumListening], output_path: Path) -> None:
-    payload = {
+def _build_payload(albums: Iterable[AlbumListening]) -> dict:
+    return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "albums": [album.to_dict() for album in albums],
     }
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def serialize_albums(albums: Iterable[AlbumListening]) -> str:
+    """Return a JSON representation of albums with metadata."""
+
+    payload = _build_payload(albums)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def export_albums(albums: Iterable[AlbumListening], output_path: Path) -> None:
+    output_path.write_text(serialize_albums(albums), encoding="utf-8")
 
 
 def load_albums(path: Path) -> List[AlbumListening]:
