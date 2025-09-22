@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import sys
 import threading
 import time
 from contextlib import suppress
@@ -60,12 +61,14 @@ class _DesktopApi:
 
         self._window = window
 
-    def save_albums_json(self, filename: str, content: str) -> dict[str, str]:
-        """Prompt the user to save the generated JSON file to disk."""
+    def _prompt_with_pywebview(
+        self, filename: str
+    ) -> tuple[Path | None, bool, str | None]:
+        """Try to let pywebview open a save dialog."""
 
         window = self._window
         if window is None:
-            return {"status": "error", "message": "Окно ещё не готово."}
+            return None, False, "Окно ещё не готово."
 
         try:  # pragma: no cover - depends on GUI backend
             selection = window.create_file_dialog(
@@ -74,10 +77,10 @@ class _DesktopApi:
                 file_types=("JSON файл (*.json)", "Все файлы (*.*)"),
             )
         except Exception as exc:  # pragma: no cover - backend specific
-            return {"status": "error", "message": str(exc)}
+            return None, False, f"pywebview: {exc}"
 
         if not selection:
-            return {"status": "cancelled"}
+            return None, True, None
 
         if isinstance(selection, (list, tuple)):
             destination = selection[0]
@@ -85,14 +88,115 @@ class _DesktopApi:
             destination = selection
 
         if not destination:
-            return {"status": "cancelled"}
+            return None, True, None
+
+        return Path(destination), False, None
+
+    def _prompt_with_tkinter(
+        self, filename: str
+    ) -> tuple[Path | None, bool, str | None]:
+        """Fallback to a tkinter-based save dialog if available."""
+
+        try:  # pragma: no cover - optional dependency at runtime
+            import tkinter as tk
+            from tkinter import filedialog
+        except Exception as exc:  # pragma: no cover - depends on platform availability
+            return None, False, f"tkinter: {exc}"
 
         try:
-            Path(destination).write_text(content, encoding="utf-8")
-        except OSError as exc:  # pragma: no cover - filesystem specific
-            return {"status": "error", "message": str(exc)}
+            root = tk.Tk()
+        except Exception as exc:  # pragma: no cover - depends on platform availability
+            return None, False, f"tkinter: {exc}"
 
-        return {"status": "saved"}
+        selection: str | tuple[str, ...] | None = None
+
+        try:
+            root.withdraw()
+            try:
+                root.update_idletasks()
+            except Exception:  # pragma: no cover - best effort to avoid focus issues
+                pass
+            try:
+                root.attributes("-topmost", True)
+            except Exception:  # pragma: no cover - platform dependent
+                pass
+
+            selection = filedialog.asksaveasfilename(
+                title="Сохранить файл",
+                defaultextension=".json",
+                initialfile=filename,
+                filetypes=[("JSON файл (*.json)", "*.json"), ("Все файлы (*.*)", "*.*")],
+            )
+        except Exception as exc:  # pragma: no cover - UI toolkit specific
+            return None, False, f"tkinter: {exc}"
+        finally:
+            try:
+                root.destroy()
+            except Exception:  # pragma: no cover - platform dependent cleanup
+                pass
+
+        if not selection:
+            return None, True, None
+
+        if isinstance(selection, (tuple, list)):
+            destination = selection[0]
+        else:
+            destination = selection
+
+        if not destination:
+            return None, True, None
+
+        return Path(destination), False, None
+
+    def save_albums_json(self, filename: str, content: str) -> dict[str, str]:
+        """Prompt the user to save the generated JSON file to disk."""
+
+        errors: list[str] = []
+
+        prompt_order = []
+        if sys.platform.startswith("win"):
+            prompt_order.extend(
+                [
+                    lambda: self._prompt_with_tkinter(filename),
+                    lambda: self._prompt_with_pywebview(filename),
+                ]
+            )
+        else:
+            prompt_order.extend(
+                [
+                    lambda: self._prompt_with_pywebview(filename),
+                    lambda: self._prompt_with_tkinter(filename),
+                ]
+            )
+
+        for prompt in prompt_order:
+            destination, cancelled, error = prompt()
+            if error:
+                errors.append(error)
+                continue
+
+            if destination is not None:
+                try:
+                    destination.write_text(content, encoding="utf-8")
+                except OSError as exc:  # pragma: no cover - filesystem specific
+                    errors.append(str(exc))
+                    continue
+                return {"status": "saved"}
+
+            if cancelled:
+                return {"status": "cancelled"}
+
+        if errors:
+            # Deduplicate errors while keeping order for readability.
+            seen: set[str] = set()
+            unique_errors = []
+            for message in errors:
+                if message and message not in seen:
+                    seen.add(message)
+                    unique_errors.append(message)
+            return {"status": "error", "message": "; ".join(unique_errors)}
+
+        return {"status": "error", "message": "Не удалось сохранить файл."}
 
 
 def _wait_for_server(port: int, timeout: float = 10.0) -> None:
