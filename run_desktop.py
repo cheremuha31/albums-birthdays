@@ -61,6 +61,85 @@ class _DesktopApi:
 
         self._window = window
 
+    def _prompt_with_win32(
+        self, filename: str
+    ) -> tuple[Path | None, bool, str | None]:
+        """Show a native Windows save dialog using the Win32 API."""
+
+        if not sys.platform.startswith("win"):
+            return None, False, "win32: недоступно на этой платформе"
+
+        try:  # pragma: no cover - requires Windows to exercise for real
+            import ctypes
+            from ctypes import wintypes
+        except Exception as exc:  # pragma: no cover - depends on runtime availability
+            return None, False, f"win32: {exc}"
+
+        try:  # pragma: no cover - only executed on Windows
+            comdlg32 = ctypes.windll.comdlg32
+            user32 = ctypes.windll.user32
+        except Exception as exc:  # pragma: no cover - depends on Win32 availability
+            return None, False, f"win32: {exc}"
+
+        class OPENFILENAMEW(ctypes.Structure):  # pragma: no cover - structure mirrors Win32
+            _fields_ = [
+                ("lStructSize", wintypes.DWORD),
+                ("hwndOwner", wintypes.HWND),
+                ("hInstance", wintypes.HINSTANCE),
+                ("lpstrFilter", wintypes.LPCWSTR),
+                ("lpstrCustomFilter", wintypes.LPWSTR),
+                ("nMaxCustFilter", wintypes.DWORD),
+                ("nFilterIndex", wintypes.DWORD),
+                ("lpstrFile", wintypes.LPWSTR),
+                ("nMaxFile", wintypes.DWORD),
+                ("lpstrFileTitle", wintypes.LPWSTR),
+                ("nMaxFileTitle", wintypes.DWORD),
+                ("lpstrInitialDir", wintypes.LPCWSTR),
+                ("lpstrTitle", wintypes.LPCWSTR),
+                ("Flags", wintypes.DWORD),
+                ("nFileOffset", wintypes.WORD),
+                ("nFileExtension", wintypes.WORD),
+                ("lpstrDefExt", wintypes.LPCWSTR),
+                ("lCustData", wintypes.LPARAM),
+                ("lpfnHook", ctypes.c_void_p),
+                ("lpTemplateName", wintypes.LPCWSTR),
+                ("pvReserved", ctypes.c_void_p),
+                ("dwReserved", wintypes.DWORD),
+                ("FlagsEx", wintypes.DWORD),
+            ]
+
+        buffer = ctypes.create_unicode_buffer(4096)
+        default_name = Path(filename).name or "albums.json"
+        buffer.value = default_name.replace("\0", "") or "albums.json"
+
+        ofn = OPENFILENAMEW()
+        ofn.lStructSize = ctypes.sizeof(OPENFILENAMEW)
+        ofn.hwndOwner = user32.GetForegroundWindow()
+        filter_spec = "JSON файл (*.json)\0*.json\0Все файлы (*.*)\0*.*\0\0"
+        ofn.lpstrFilter = filter_spec
+        ofn.nFilterIndex = 1
+        ofn.lpstrFile = ctypes.cast(buffer, wintypes.LPWSTR)
+        ofn.nMaxFile = len(buffer)
+        ofn.lpstrTitle = "Сохранить albums.json"
+        ofn.Flags = 0x00000002 | 0x00000008 | 0x00000800  # overwrite prompt, keep cwd, existing paths
+        ofn.lpstrDefExt = "json"
+
+        try:  # pragma: no cover - real execution requires Windows GUI
+            success = comdlg32.GetSaveFileNameW(ctypes.byref(ofn))
+        except Exception as exc:  # pragma: no cover - Win32 specific failure
+            return None, False, f"win32: {exc}"
+
+        if success:
+            selected = buffer.value.strip()
+            if not selected:
+                return None, True, None
+            return Path(selected), False, None
+
+        error_code = comdlg32.CommDlgExtendedError()
+        if error_code:
+            return None, False, f"win32: ошибка диалога сохранения (код 0x{error_code:08x})"
+        return None, True, None
+
     def _prompt_with_pywebview(
         self, filename: str
     ) -> tuple[Path | None, bool, str | None]:
@@ -157,6 +236,7 @@ class _DesktopApi:
         if sys.platform.startswith("win"):
             prompt_order.extend(
                 [
+                    lambda: self._prompt_with_win32(filename),
                     lambda: self._prompt_with_tkinter(filename),
                     lambda: self._prompt_with_pywebview(filename),
                 ]
