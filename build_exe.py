@@ -1,4 +1,4 @@
-"""Helper to bundle the web UI into a standalone executable with PyInstaller."""
+"""Helper to bundle the web UI into standalone executables with PyInstaller."""
 from __future__ import annotations
 
 import argparse
@@ -14,20 +14,26 @@ else:
     _IMPORT_ERROR = None
 
 
-DEFAULT_APP_NAME = "albums-json-web"
+ENTRY_SCRIPTS = {
+    "browser": "run_webapp.py",
+    "desktop": "run_desktop.py",
+}
+
+DEFAULT_APP_NAMES = {
+    "browser": "albums-json-web",
+    "desktop": "albums-json-desktop",
+}
 
 
-def build(name: str, windowed: bool, clean: bool) -> Path:
+def build(name: str, entry_script: Path, windowed: bool, clean: bool) -> Path:
     """Invoke PyInstaller and return a path to the built executable."""
     if pyinstaller_run is None:  # pragma: no cover - dependency is optional at runtime
         raise SystemExit(
             "PyInstaller is not installed. Install it first with `pip install pyinstaller`."
         ) from _IMPORT_ERROR
 
-    project_root = Path(__file__).resolve().parent
-    entry_script = project_root / "run_webapp.py"
     if not entry_script.exists():  # pragma: no cover - sanity guard
-        raise SystemExit("run_webapp.py was not found. Make sure you run the script from the repo root.")
+        raise SystemExit(f"{entry_script.name} was not found. Make sure you run the script from the repo root.")
 
     args: list[str] = [
         str(entry_script),
@@ -42,6 +48,7 @@ def build(name: str, windowed: bool, clean: bool) -> Path:
 
     pyinstaller_run(args)
 
+    project_root = Path(__file__).resolve().parent
     executable = project_root / "dist" / (name + (".exe" if sys.platform.startswith("win") else ""))
     if not executable.exists():  # pragma: no cover - check for non-Windows name
         executable = project_root / "dist" / name
@@ -51,9 +58,17 @@ def build(name: str, windowed: bool, clean: bool) -> Path:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--mode",
+        choices=sorted(ENTRY_SCRIPTS.keys()),
+        default="browser",
+        help=(
+            "Type of executable to build: 'browser' launches the app in the system browser (default); "
+            "'desktop' embeds the UI via pywebview."
+        ),
+    )
+    parser.add_argument(
         "--name",
-        default=DEFAULT_APP_NAME,
-        help="Name of the generated executable (default: %(default)s)",
+        help="Name of the generated executable (default depends on --mode)",
     )
     parser.add_argument(
         "--console",
@@ -70,7 +85,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv or sys.argv[1:])
-    executable_path = build(name=args.name, windowed=not args.console, clean=args.clean)
+    project_root = Path(__file__).resolve().parent
+    entry_script = project_root / ENTRY_SCRIPTS[args.mode]
+    name = args.name or DEFAULT_APP_NAMES[args.mode]
+
+    executable_path = build(
+        name=name,
+        entry_script=entry_script,
+        windowed=not args.console,
+        clean=args.clean,
+    )
     message = f"Executable built at: {executable_path}"
     if executable_path.exists():
         size = executable_path.stat().st_size
