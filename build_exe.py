@@ -16,12 +16,10 @@ else:
 
 ENTRY_SCRIPTS = {
     "browser": "run_webapp.py",
-    "desktop": "run_desktop.py",
 }
 
 DEFAULT_APP_NAMES = {
     "browser": "albums-json-web",
-    "desktop": "albums-json-desktop",
 }
 
 
@@ -42,20 +40,6 @@ def build(name: str, entry_script: Path, windowed: bool, clean: bool) -> Path:
         "--onefile",
     ]
 
-    if entry_script.name == "run_desktop.py":
-        # pywebview loads its platform backends dynamically, so we need to
-        # tell PyInstaller to bundle them explicitly when building the desktop
-        # executable. Otherwise the app launches without opening a window.
-        args.extend(
-            [
-                "--hidden-import",
-                "webview",
-                "--collect-submodules",
-                "webview",
-                "--collect-data",
-                "webview",
-            ]
-        )
     if windowed:
         args.append("--noconsole")
     if clean:
@@ -77,8 +61,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         choices=sorted(ENTRY_SCRIPTS.keys()),
         default="browser",
         help=(
-            "Type of executable to build: 'browser' launches the app in the system browser (default); "
-            "'desktop' embeds the UI via pywebview."
+            "Type of executable to build (only 'browser' is available: it launches the app in the system browser)."
         ),
     )
     parser.add_argument(

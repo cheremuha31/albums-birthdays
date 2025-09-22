@@ -82,9 +82,6 @@ INDEX_TEMPLATE = r"""
       const form = document.querySelector('form');
       const indicator = document.getElementById('processing-indicator');
       const clientErrorBox = document.getElementById('client-error');
-      const pywebviewApi = window.pywebview && typeof window.pywebview.api === 'object'
-        ? window.pywebview.api
-        : null;
       if (!form || !indicator) {
         return;
       }
@@ -171,37 +168,6 @@ INDEX_TEMPLATE = r"""
             filename = decodeURIComponent(utf8Match[1]);
           } else if (plainMatch && plainMatch[1]) {
             filename = plainMatch[1];
-          }
-
-          let pywebviewSave = null;
-          if (pywebviewApi) {
-            if (typeof pywebviewApi.save_albums_json === 'function') {
-              pywebviewSave = pywebviewApi.save_albums_json.bind(pywebviewApi);
-            } else if (typeof pywebviewApi.saveAlbumsJson === 'function') {
-              pywebviewSave = pywebviewApi.saveAlbumsJson.bind(pywebviewApi);
-            }
-          }
-
-          if (pywebviewSave) {
-            try {
-              const textContent = await blob.text();
-              const result = await pywebviewSave(filename, textContent);
-              if (result && result.status === 'saved') {
-                return;
-              }
-              if (result && result.status === 'cancelled') {
-                if (clientErrorBox) {
-                  clientErrorBox.textContent = 'Сохранение отменено. Повторите попытку при необходимости.';
-                  clientErrorBox.hidden = false;
-                }
-                return;
-              }
-              if (result && result.status === 'error' && result.message) {
-                throw new Error(result.message);
-              }
-            } catch (pywebviewError) {
-              console.error('pywebview: не удалось сохранить файл', pywebviewError);
-            }
           }
 
           const blobUrl = window.URL.createObjectURL(blob);
