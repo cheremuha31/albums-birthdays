@@ -1,0 +1,21 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable, List
+
+from .models import AlbumListening
+
+
+def export_albums(albums: Iterable[AlbumListening], output_path: Path) -> None:
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "albums": [album.to_dict() for album in albums],
+    }
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_albums(path: Path) -> List[AlbumListening]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [AlbumListening.from_dict(entry) for entry in data.get("albums", [])]
