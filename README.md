@@ -55,21 +55,21 @@ python -m album_analyzer.webapp
 
 Чтобы делиться приложением с пользователями, у которых не установлен Python, можно собрать автономный `.exe` (или бинарь для своей ОС) через [PyInstaller](https://pyinstaller.org/). В репозитории добавлены вспомогательные скрипты:
 
-1. Установите PyInstaller — он не входит в основные зависимости проекта.
+1. Установите PyInstaller — он не входит в основные зависимости проекта. Для варианта со встроенным окном дополнительно нужен `pywebview`.
 
-   ```bash
-   pip install pyinstaller
-   ```
+    ```bash
+    pip install pyinstaller
+    pip install pywebview  # только если нужен режим desktop
+    ```
 
-2. Запустите сборку из корня репозитория.
+2. Запустите сборку из корня репозитория. По умолчанию формируется браузерная версия, которая разворачивает Flask и открывает страницу во внешнем браузере. Для режима `desktop` используется `run_desktop.py`, который запускает тот же Flask, но отображает интерфейс во встроенном окне (через pywebview).
 
-   ```bash
-   python build_exe.py
-   ```
+    ```bash
+    python build_exe.py                 # dist/albums-json-web(.exe)
+    python build_exe.py --mode desktop  # dist/albums-json-desktop(.exe)
+    ```
 
-   Скрипт соберёт файл `dist/albums-json-web.exe` (на Windows) или `dist/albums-json-web` (на Linux/macOS). Файл `run_webapp.py` служит точкой входа для PyInstaller: он запускает локальный сервер и автоматически открывает браузер с формой.
-
-При необходимости можно поменять имя файла (`python build_exe.py --name my-generator`) или оставить консольное окно (`python build_exe.py --console`).
+    Флаги `--name` и `--console` работают в обоих режимах: можно переименовать исполняемый файл (`--name my-generator`) или оставить консоль (`--console`). Аналогичные режимы доступны без сборки через `python run_webapp.py` (браузер) и `python run_desktop.py` (встроенное окно).
 
 ## Запуск Telegram‑бота
 
