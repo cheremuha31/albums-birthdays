@@ -1,0 +1,20 @@
+[
+  {
+    "master_metadata_album_album_name": "Test Album",
+    "master_metadata_album_artist_name": "Test Artist",
+    "master_metadata_track_name": "Track One",
+    "ms_played": 120000
+  },
+  {
+    "master_metadata_album_album_name": "Test Album",
+    "master_metadata_album_artist_name": "Test Artist",
+    "master_metadata_track_name": "Track Two",
+    "ms_played": 240000
+  },
+  {
+    "master_metadata_album_album_name": "Another Album",
+    "master_metadata_album_artist_name": "Another Artist",
+    "master_metadata_track_name": "Track A",
+    "ms_played": 60000
+  }
+]
