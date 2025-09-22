@@ -14,7 +14,7 @@ from .parser import aggregate_archives, filter_by_minutes
 from .release_date import enrich_with_release_dates
 
 
-INDEX_TEMPLATE = """
+INDEX_TEMPLATE = r"""
 <!doctype html>
 <html lang="ru">
 <head>
@@ -30,9 +30,23 @@ INDEX_TEMPLATE = """
     .error { color: #a40000; font-weight: 600; }
     .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
     footer { margin-top: 2rem; font-size: 0.9rem; color: #555; }
+    .processing-indicator[hidden] { display: none; }
+    .processing-indicator { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(2px); transition: opacity 0.2s ease-in-out; opacity: 0; pointer-events: none; z-index: 1000; }
+    .processing-indicator.visible { opacity: 1; pointer-events: all; }
+    .processing-content { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 20px 45px rgba(16, 30, 54, 0.12); max-width: 420px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+    .spinner { width: 52px; height: 52px; border-radius: 50%; border: 5px solid #dbe5ff; border-top-color: #1c6ee8; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress-text { font-weight: 600; }
   </style>
 </head>
 <body>
+  <div id="processing-indicator" class="processing-indicator" hidden>
+    <div class="processing-content" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="progress-text" data-progress-text>Обработка данных…</div>
+      <p>Пожалуйста, не закрывайте окно. Если включен поиск дат релиза, запросы к MusicBrainz могут занять несколько минут.</p>
+    </div>
+  </div>
   <header>
     <h1>Подготовка JSON для Telegram-бота</h1>
     <p>Загрузите архивы или JSON-файлы с историей прослушиваний, выберите параметры и получите готовый <code>albums.json</code>.</p>
@@ -40,6 +54,7 @@ INDEX_TEMPLATE = """
   {% if error %}
     <p class="error">{{ error }}</p>
   {% endif %}
+  <p id="client-error" class="error" hidden></p>
   <form method="post" enctype="multipart/form-data">
     <div>
       <label for="archives">Архивы или JSON-файлы</label><br>
@@ -62,6 +77,128 @@ INDEX_TEMPLATE = """
   <footer>
     <p>Приложение работает локально. После завершения обработки откроется загрузка файла <code>albums.json</code>.</p>
   </footer>
+  <script>
+    (function () {
+      const form = document.querySelector('form');
+      const indicator = document.getElementById('processing-indicator');
+      const clientErrorBox = document.getElementById('client-error');
+      if (!form || !indicator) {
+        return;
+      }
+
+      const submitButton = form.querySelector('input[type="submit"]');
+      const originalButtonText = submitButton ? submitButton.value : '';
+      const statusText = indicator.querySelector('[data-progress-text]');
+      const frames = ['Обработка данных…', 'Обработка данных.', 'Обработка данных..', 'Обработка данных...'];
+      let frameIndex = 0;
+      let intervalId;
+
+      function showIndicator() {
+        indicator.removeAttribute('hidden');
+        indicator.classList.add('visible');
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.value = 'Обработка…';
+        }
+        if (statusText && !intervalId) {
+          intervalId = window.setInterval(() => {
+            frameIndex = (frameIndex + 1) % frames.length;
+            statusText.textContent = frames[frameIndex];
+          }, 600);
+        }
+      }
+
+      function hideIndicator() {
+        indicator.classList.remove('visible');
+        indicator.setAttribute('hidden', '');
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.value = originalButtonText || 'Сформировать JSON';
+        }
+        if (intervalId) {
+          window.clearInterval(intervalId);
+          intervalId = undefined;
+        }
+        if (statusText) {
+          frameIndex = 0;
+          statusText.textContent = frames[0];
+        }
+      }
+
+      form.addEventListener('submit', async (event) => {
+        if (clientErrorBox) {
+          clientErrorBox.hidden = true;
+          clientErrorBox.textContent = '';
+        }
+
+        if (!window.fetch || !window.URL || !window.URL.createObjectURL) {
+          showIndicator();
+          return;
+        }
+
+        event.preventDefault();
+        showIndicator();
+
+        try {
+          const response = await fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: new FormData(form),
+          });
+
+          const contentType = response.headers.get('Content-Type') || '';
+
+          if (contentType.includes('text/html')) {
+            const html = await response.text();
+            document.open();
+            document.write(html);
+            document.close();
+            return;
+          }
+
+          if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+
+          const blob = await response.blob();
+          const disposition = response.headers.get('Content-Disposition') || '';
+          const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+          const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
+          let filename = 'albums.json';
+          if (utf8Match && utf8Match[1]) {
+            filename = decodeURIComponent(utf8Match[1]);
+          } else if (plainMatch && plainMatch[1]) {
+            filename = plainMatch[1];
+          }
+
+          const blobUrl = window.URL.createObjectURL(blob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = blobUrl;
+          downloadLink.download = filename;
+          downloadLink.style.display = 'none';
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          window.setTimeout(() => {
+            document.body.removeChild(downloadLink);
+            window.URL.revokeObjectURL(blobUrl);
+          }, 0);
+        } catch (fetchError) {
+          console.error('Ошибка при формировании JSON', fetchError);
+          if (clientErrorBox) {
+            clientErrorBox.textContent = 'Не удалось сформировать JSON. Проверьте подключение к интернету и попробуйте снова.';
+            clientErrorBox.hidden = false;
+          } else {
+            window.alert('Не удалось сформировать JSON. Проверьте подключение к интернету и попробуйте снова.');
+          }
+        } finally {
+          hideIndicator();
+        }
+      });
+
+      window.addEventListener('pageshow', () => {
+        hideIndicator();
+      });
+    })();
+  </script>
 </body>
 </html>
 """
