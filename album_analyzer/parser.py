@@ -11,10 +11,13 @@ from .models import AlbumListening
 
 LOGGER = logging.getLogger(__name__)
 
-SUPPORTED_JSON_SUFFIXES = (
-    "endsong_",
-    "Streaming_History_Audio",
-    "StreamingHistory",
+SUPPORTED_JSON_SUFFIXES = tuple(
+    suffix.lower()
+    for suffix in (
+        "endsong_",
+        "Streaming_History_Audio",
+        "StreamingHistory",
+    )
 )
 
 
