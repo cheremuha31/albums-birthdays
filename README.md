@@ -51,6 +51,26 @@ python -m album_analyzer.webapp
 
 Файл `albums.json` содержит массив альбомов со всеми необходимыми полями (`album`, `artist`, `minutes_listened`, `release_date`, список треков и т.д.). Именно этот файл нужен Telegram‑боту.
 
+### Сборка веб-приложения в исполняемый файл
+
+Чтобы делиться приложением с пользователями, у которых не установлен Python, можно собрать автономный `.exe` (или бинарь для своей ОС) через [PyInstaller](https://pyinstaller.org/). В репозитории добавлены вспомогательные скрипты:
+
+1. Установите PyInstaller — он не входит в основные зависимости проекта.
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. Запустите сборку из корня репозитория.
+
+   ```bash
+   python build_exe.py
+   ```
+
+   Скрипт соберёт файл `dist/albums-json-web.exe` (на Windows) или `dist/albums-json-web` (на Linux/macOS). Файл `run_webapp.py` служит точкой входа для PyInstaller: он запускает локальный сервер и автоматически открывает браузер с формой.
+
+При необходимости можно поменять имя файла (`python build_exe.py --name my-generator`) или оставить консольное окно (`python build_exe.py --console`).
+
 ## Запуск Telegram‑бота
 
 1. Создайте бота через [@BotFather](https://t.me/BotFather) и получите токен.
